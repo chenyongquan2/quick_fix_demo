@@ -121,8 +121,8 @@ int main(int argc, char** argv) {
             std::error_code ec; fs::create_directories(dir, ec);
         }
         auto logger = spdlog::hourly_logger_mt("initiator", "log/spdlog/initiator.log", 0, 0);
-        logger->set_level(spdlog::level::trace);
-        logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%n] %v");
+        logger->set_level(spdlog::level::info);
+        logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%n] [%s:%#] %v");
         spdlog::set_default_logger(logger);
         spdlog::flush_on(spdlog::level::info);
 

@@ -16,9 +16,12 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <optional>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/hourly_file_sink.h>
+
+#include "fix_custom.hpp"
 
 class ClientApplication : public FIX::Application, public FIX::MessageCracker {
 public:
@@ -53,6 +56,19 @@ public:
     void fromApp(const FIX::Message& message, const FIX::SessionID& sessionID) override
         /* throw(FIX::FieldNotFound, FIX::IncorrectDataFormat, FIX::IncorrectTagValue, FIX::UnsupportedMessageType) */ {
         SPDLOG_INFO("[INIT] fromApp:  {}", message.toString());
+        
+        // 检查是否是自定义的BI消息
+        try {
+            FIX::MsgType mt; 
+            message.getHeader().getField(mt);
+            if (mt.getValue() == fixcustom::kMsgTypeMarginUpdate) {
+                handleMarginUpdateMessage(message, sessionID);
+                return;
+            }
+        } catch (const std::exception& ex) {
+            SPDLOG_ERROR("[INIT] fromApp BI check error: {}", ex.what());
+        }
+        
         crack(message, sessionID);
     }
 
@@ -77,6 +93,56 @@ public:
             SPDLOG_INFO("[INIT] CxlReject: ClOrdID={}, Text={}", clOrdId.getValue(), text.getValue());
         } catch (const std::exception& ex) {
             SPDLOG_ERROR("[INIT] onMessage(9) error: {}", ex.what());
+        }
+    }
+
+    // 处理 BI 消息: 保证金更新 (Margin Update Message)
+    void handleMarginUpdateMessage(const FIX::Message& msg, const FIX::SessionID& sessionID) {
+        try {
+            // 解析所有必填字段
+            std::string account;
+            double marginValue = 0.0;
+            double marginLevel = 0.0;
+            double marginExcess = 0.0;
+            int currency = 0;
+
+            // 1: 账户ID
+            if (msg.isSetField(fixcustom::TAG_ACCOUNT)) {
+                FIX::Account acc; msg.getField(acc);
+                account = acc.getValue();
+            }
+
+            // 20002: 保证金总额
+            if (msg.isSetField(fixcustom::TAG_MARGIN_VALUE)) {
+                FIX::FieldBase f(fixcustom::TAG_MARGIN_VALUE, "");
+                msg.getField(f);
+                marginValue = std::stod(f.getString());
+            }
+
+            // 20003: 已使用保证金比例%
+            if (msg.isSetField(fixcustom::TAG_MARGIN_LEVEL)) {
+                FIX::FieldBase f(fixcustom::TAG_MARGIN_LEVEL, "");
+                msg.getField(f);
+                marginLevel = std::stod(f.getString());
+            }
+
+            // 899: 超额保证金
+            if (msg.isSetField(fixcustom::TAG_MARGIN_EXCESS)) {
+                FIX::FieldBase f(fixcustom::TAG_MARGIN_EXCESS, "");
+                msg.getField(f);
+                marginExcess = std::stod(f.getString());
+            }
+
+            // 15: 货币类型
+            if (msg.isSetField(fixcustom::TAG_CURRENCY)) {
+                FIX::Currency curr; msg.getField(curr);
+                currency = std::stoi(curr.getValue());
+            }
+
+            SPDLOG_INFO("[INIT] 收到保证金更新: account={}, marginValue={:.2f}, marginLevel={:.2f}%, marginExcess={:.2f}, currency={}", 
+                       account, marginValue, marginLevel, marginExcess, currency);
+        } catch (const std::exception& ex) {
+            SPDLOG_ERROR("[INIT] handleMarginUpdateMessage error: {}", ex.what());
         }
     }
 

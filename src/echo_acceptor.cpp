@@ -22,6 +22,13 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <atomic>
+#include <random>
+#include <optional>
+#include <mutex>
+#include <cstdio>
+
+#include "fix_custom.hpp"
 
 class EchoApplication : public FIX::Application, public FIX::MessageCracker {
 public:
@@ -31,10 +38,20 @@ public:
 
     void onLogon(const FIX::SessionID& sessionID) override {
         SPDLOG_INFO("[ACCEPTOR] onLogon: {}", sessionID.toString());
+        {
+            std::lock_guard<std::mutex> lk(session_mutex_);
+            session_id_ = sessionID;
+        }
+        startPushThread();
     }
 
     void onLogout(const FIX::SessionID& sessionID) override {
         SPDLOG_INFO("[ACCEPTOR] onLogout: {}", sessionID.toString());
+        stopPushThread();
+        {
+            std::lock_guard<std::mutex> lk(session_mutex_);
+            session_id_.reset();
+        }
     }
 
     void toAdmin(FIX::Message& message, const FIX::SessionID& sessionID) override {
@@ -121,6 +138,90 @@ public:
     }
 
 private:
+    // 会话与推送线程状态
+    std::mutex session_mutex_;
+    std::optional<FIX::SessionID> session_id_;
+    std::atomic<bool> push_running_{false};
+    std::thread push_thread_;
+
+    // ===== Push thread management =====
+    void startPushThread() {
+        bool expected = false;
+        if (push_running_.compare_exchange_strong(expected, true)) {
+            push_thread_ = std::thread([this]() { this->pushLoop(); });
+        }
+    }
+
+    void stopPushThread() {
+        bool expected = true;
+        if (push_running_.compare_exchange_strong(expected, false)) {
+            if (push_thread_.joinable()) {
+                push_thread_.join();
+            }
+        }
+    }
+
+    void pushLoop() {
+        std::mt19937_64 rng{std::random_device{}()};
+        std::uniform_real_distribution<double> deltaDist(-50.0, 50.0);
+        double margin = 100000.0; // 初始保证金
+
+        while (push_running_.load()) {
+            // sleep 30s in small steps to react faster to stop flag
+            for (int i = 0; i < 300 && push_running_.load(); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            if (!push_running_.load()) break;
+
+            margin += deltaDist(rng);
+            if (margin < 0) margin = 0;
+            sendMarginUpdate(margin);
+        }
+    }
+
+    void sendMarginUpdate(double marginValue) {
+        std::optional<FIX::SessionID> sid;
+        {
+            std::lock_guard<std::mutex> lk(session_mutex_);
+            sid = session_id_;
+        }
+        if (!sid.has_value()) return;
+
+        try {
+            // 构造完整的 BI 消息 (Margin Update Message)
+            FIX::Message msg;
+            msg.getHeader().setField(FIX::BeginString(FIX::BeginString_FIX44));
+            msg.getHeader().setField(FIX::MsgType(fixcustom::kMsgTypeMarginUpdate));
+
+            const std::string account = "ACC-001";
+            
+            // 计算 mock 数据
+            double marginUsed = marginValue * 0.3;  // 假设已使用30%
+            double marginExcess = marginValue - marginUsed;  // 超额保证金
+            double marginLevel = (marginValue - marginExcess) / marginValue * 100.0;  // 已使用比例%
+
+            // 设置所有必填字段
+            msg.setField(FIX::Account(account));                    // 1: 账户ID
+            
+            // 将 double 转换为字符串
+            char buf1[64], buf2[64], buf3[64];
+            std::snprintf(buf1, sizeof(buf1), "%.2f", marginValue);
+            std::snprintf(buf2, sizeof(buf2), "%.2f", marginLevel);
+            std::snprintf(buf3, sizeof(buf3), "%.2f", marginExcess);
+            
+            msg.setField(fixcustom::TAG_MARGIN_VALUE, std::string(buf1)); // 20002: 保证金总额
+            msg.setField(fixcustom::TAG_MARGIN_LEVEL, std::string(buf2)); // 20003: 已使用比例%
+            msg.setField(fixcustom::TAG_MARGIN_EXCESS, std::string(buf3)); // 899: 超额保证金
+            msg.setField(FIX::Currency(std::to_string(fixcustom::CURRENCY_USD)));   // 15: 货币(2=USD)
+
+            SPDLOG_INFO("[ACCEPTOR] 推送保证金更新: account={}, marginValue={:.2f}, marginLevel={:.2f}%, marginExcess={:.2f}, currency=USD", 
+                       account, marginValue, marginLevel, marginExcess);
+            FIX::Session::sendToTarget(msg, *sid);
+        } catch (const std::exception& ex) {
+            SPDLOG_ERROR("[ACCEPTOR] sendMarginUpdate error: {}", ex.what());
+        }
+    }
+
     static std::string generateId() {
         static std::atomic<unsigned long long> counter{1};
         auto v = counter.fetch_add(1, std::memory_order_relaxed);

@@ -68,31 +68,26 @@ add_defines("HAVE_STD_UNIQUE_PTR", --- if not define this quickfix will use std:
 	"SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE", "SPDLOG_WCHAR_TO_UTF8_SUPPORT", "WIN32_LEAN_AND_MEAN"
 )
 
--- add_packages("mt5sdk", "mt4sdk", "grpc", "spdlog", "packio", "opentelemetry-cpp",
--- 	"fmt", "quickfix", "boost", "cppkafka", "cppcodec", "hiredis",
---     "libiconv")
 
 add_packages("quickfix", "spdlog")
 
 
 
-target("echo_acceptor")
-    set_kind("binary")
-    add_files("src/echo_acceptor.cpp")
-    
-    if is_plat("windows") then
-        add_defines("WIN32_LEAN_AND_MEAN", "_WIN32_WINNT=0x0601")
-        add_syslinks("ws2_32")
-    end
+target("black-arrow-initiator")
+	add_defines("VERSION_MAJOR=1", "VERSION_MINOR=0", "VERSION_ALTER=0")
+	add_files("src/*.cpp")
+	remove_files("src/acceptor_main.cpp")
+	add_includedirs("src")
+	set_kind("binary")
+	--add_deps("fp-common")
 
-target("echo_initiator")
-    set_kind("binary")
-    add_files("src/echo_initiator.cpp")
-    if is_plat("windows") then
-        add_defines("WIN32_LEAN_AND_MEAN", "_WIN32_WINNT=0x0601")
-        add_syslinks("ws2_32")
-    end
-
+target("black-arrow-acceptor")
+	add_defines("VERSION_MAJOR=1", "VERSION_MINOR=0", "VERSION_ALTER=0")
+	add_files("src/*.cpp")
+	remove_files("src/initiator_main.cpp")
+	add_includedirs("src")
+	set_kind("binary")
+	--add_deps("fp-common")
 
 after_build(function(target)
 	import("core.project.task")

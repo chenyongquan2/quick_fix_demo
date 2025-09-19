@@ -8,22 +8,23 @@
 #include <quickfix/FileLog.h>
 #include <quickfix/SocketInitiator.h>
 
-// #include "fp-common/utils.h"
+#include "cc-common/utils.h"
 #include "initiator_application.h"
 
 int main()
 {
     try {
-        // std::string configuration_path = (std::filesystem::current_path() / "Config" / "black-arrow-common.ini").string();
-        // assert_file_exist(configuration_path);
+        std::string configuration_path
+            = (std::filesystem::current_path() / "Config" / "black-arrow-common.ini").string();
+        assert_file_exist(configuration_path);
 
-        // spdlog_configuration spdlog_c;
-        // spdlog_c.dynamic_flush_configuration_path_ = configuration_path;
-        // spdlog_c.async_ = true;
-        // init_spdlog(spdlog_c, "fix-initiator");
+        spdlog_configuration spdlog_c;
+        spdlog_c.dynamic_flush_configuration_path_ = configuration_path;
+        spdlog_c.async_ = true;
+        init_spdlog(spdlog_c, "fix-initiator");
 
-        std::string fix_cfg_path =  (std::filesystem::current_path() / "Config" / "fix-initiator.cfg").string();
-        //assert_file_exist(fix_cfg_path);
+        std::string fix_cfg_path = (std::filesystem::current_path() / "Config" / "fix-initiator.cfg").string();
+        assert_file_exist(fix_cfg_path);
 
         InitiatorApplication application;
         FIX::SessionSettings settings(fix_cfg_path);
@@ -34,7 +35,7 @@ int main()
         initiator.start();
         SPDLOG_INFO("Initiator started with settings: {}", fix_cfg_path);
 
-        //endless_wait();
+        endless_wait();
 
         initiator.stop();
         SPDLOG_INFO("Initiator stopping...");

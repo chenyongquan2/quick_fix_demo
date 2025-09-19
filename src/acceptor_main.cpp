@@ -8,23 +8,23 @@
 #include <quickfix/FileLog.h>
 #include <quickfix/SocketAcceptor.h>
 
-// #include "fp-common/utils.h"
+#include "cc-common/utils.h"
 #include "acceptor_application.h"
-
 
 int main()
 {
     try {
-        // std::string configuration_path = (std::filesystem::current_path() /  "Config" / "black-arrow-common.ini").string();
-        // assert_file_exist(configuration_path);
+        std::string configuration_path
+            = (std::filesystem::current_path() / "Config" / "black-arrow-common.ini").string();
+        assert_file_exist(configuration_path);
 
-        // spdlog_configuration spdlog_c;
-        // spdlog_c.dynamic_flush_configuration_path_ = configuration_path;
-        // spdlog_c.async_ = true;
-        // init_spdlog(spdlog_c, "fix-acceptor");
+        spdlog_configuration spdlog_c;
+        spdlog_c.dynamic_flush_configuration_path_ = configuration_path;
+        spdlog_c.async_ = true;
+        init_spdlog(spdlog_c, "fix-acceptor");
 
-        std::string fix_cfg_path =  (std::filesystem::current_path() / "Config" / "fix-acceptor.cfg").string();
-        //assert_file_exist(fix_cfg_path);
+        std::string fix_cfg_path = (std::filesystem::current_path() / "Config" / "fix-acceptor.cfg").string();
+        // assert_file_exist(fix_cfg_path);
 
         AcceptorApplication application;
         FIX::SessionSettings settings(fix_cfg_path);
@@ -35,7 +35,7 @@ int main()
         acceptor.start();
         SPDLOG_INFO("Acceptor started with settings: {}", fix_cfg_path);
 
-        //endless_wait();
+        endless_wait();
 
         acceptor.stop();
         SPDLOG_INFO("Acceptor stopping...");
@@ -46,6 +46,3 @@ int main()
 
     return -1;
 }
-
-
-

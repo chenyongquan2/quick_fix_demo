@@ -15,6 +15,17 @@ Initialize Conan client (first time only):
 conan profile detect --force
 ```
 
+Update sub module code.
+```bash
+git submodule update --init --recursive
+```
+
+If the git link hash relating from the sub-module vary, we should commit it in the parent repo
+git commit info example:
+```Text
+ Update cc-common submodule to latest commit.
+```
+
 ## Build
 
 ```bash

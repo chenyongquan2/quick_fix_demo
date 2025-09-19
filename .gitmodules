@@ -1,0 +1,4 @@
+[submodule "cc-common"]
+	path = cc-common
+	url = https://github.com/chenyongquan2/cc-common.git
+	branch = main
